@@ -9,11 +9,18 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(f"LEGAL_RAG_{name}", default)
 
 
+def _model(name: str, default: str) -> str:
+    """Имя модели на Hub или путь к папке. Если веса скачаны вручную в
+    models/<имя без организации>, берём их — Hub не понадобится."""
+    model = _env(name, default)
+    local = os.path.join("models", model.rsplit("/", 1)[-1])
+    return local if os.path.isdir(local) else model
+
+
 @dataclass(frozen=True)
 class Settings:
-    # Имя модели на Hugging Face Hub или путь к локальной папке с весами.
-    embedding_model: str = _env("EMBEDDING_MODEL", "BAAI/bge-m3")
-    llm_model: str = _env("LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
+    embedding_model: str = _model("EMBEDDING_MODEL", "BAAI/bge-m3")
+    llm_model: str = _model("LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
     device: str = _env("DEVICE", "cpu")
 
     data_dir: str = _env("DATA_DIR", "data")

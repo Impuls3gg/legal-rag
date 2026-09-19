@@ -53,7 +53,11 @@ class FaissStore:
             results.append(SearchResult(chunk=self._chunks[idx], score=float(score)))
         return results
 
-    def __len__(self) -> int:
+    @property
+    def chunks(self) -> list[Chunk]:
         if self._index is None:
             self.load()
-        return len(self._chunks)
+        return self._chunks
+
+    def __len__(self) -> int:
+        return len(self.chunks)
