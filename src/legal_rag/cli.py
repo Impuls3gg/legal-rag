@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .chunking import act_to_chunks
-from .config import settings
+from .config import resolve_device, settings
 from .embeddings import HFEmbedder
 from .index.faiss_store import FaissStore
 from .ingest.local_files import LocalFilesSource
@@ -40,7 +40,8 @@ def build_index() -> None:
                   f"проверьте формат текста/парсер.")
         chunks.extend(act_chunks)
 
-    print(f"Актов: {len(acts)}, чанков: {len(chunks)}. Загружаю {settings.embedding_model}...")
+    print(f"Актов: {len(acts)}, чанков: {len(chunks)}. "
+          f"Загружаю {settings.embedding_model} ({resolve_device()})...")
     embedder = HFEmbedder()
     step = settings.embedding_batch_size
     vectors = [
@@ -60,12 +61,35 @@ def ask(question: str) -> None:
         print("Ничего не найдено. Индекс построен? (build-index)")
         return
 
-    print(f"Загружаю {settings.llm_model}...", file=sys.stderr)
+    best = results[0].score
+    if best < settings.min_score:
+        print(
+            f"В базе нет статей по этому вопросу: лучшее совпадение {best:.3f} "
+            f"ниже порога {settings.min_score:.2f} (LEGAL_RAG_MIN_SCORE). "
+            f"Ближайшее, что нашлось:"
+        )
+        _print_sources(results[:3])
+        return
+
+    # Эмбеддер больше не нужен — отдаём его память (на 6-ГБ карте это ~1 ГБ
+    # запаса под KV-кэш LLM) до того, как грузить генеративную модель.
+    device = retriever.embedder.device
+    del retriever
+    if device.startswith("cuda"):
+        import torch
+
+        torch.cuda.empty_cache()
+
+    print(f"Загружаю {settings.llm_model} ({device})...", file=sys.stderr)
     llm = HFLLM()
     answer = llm.answer(question, results)
 
     print(answer)
     print("\n--- Источники ---")
+    _print_sources(results)
+
+
+def _print_sources(results) -> None:
     for r in results:
         print(f"({r.score:.3f}) {r.chunk.citation()}")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .config import settings
+from .config import resolve_device, resolve_llm_dtype, settings
 from .models import SearchResult
 
 _SYSTEM_PROMPT = (
@@ -18,12 +18,13 @@ _SYSTEM_PROMPT = (
 class HFLLM:
     def __init__(self, model_name: str | None = None, device: str | None = None):
         self.model_name = model_name or settings.llm_model
-        self.device = device or settings.device
+        self.device = device or resolve_device()
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        # bf16 вдвое экономит память относительно fp32; на CPU считается медленнее,
-        # но fp32 для 1.5B — это уже 6 ГБ, для 3B — 12 ГБ.
+        # Половинная точность вдвое экономит память относительно fp32: для 1.5B
+        # это 3 вместо 6 ГБ, для 3B — 6 вместо 12. Какая именно половинная —
+        # решает resolve_llm_dtype (fp16 на GPU, bf16 на CPU).
         self.model = (
-            AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.bfloat16)
+            AutoModelForCausalLM.from_pretrained(self.model_name, dtype=resolve_llm_dtype(self.device))
             .to(self.device)
             .eval()
         )

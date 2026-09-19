@@ -4,7 +4,8 @@ version = "0.2.0"
 description = "Локальный RAG-поиск по законодательству РФ (transformers + FAISS, без RAG-фреймворков)"
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.4",
+    # torch намеренно не здесь, а только в extras cpu/cu126: иначе `uv sync` без extra
+    # молча ставит дефолтный torch с PyPI (CUDA 13, +2.5 ГБ) поверх выбранной сборки.
     "transformers>=4.56",
     "faiss-cpu>=1.8",
     "numpy>=1.26",
@@ -17,6 +18,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Сборка torch выбирается extra-флагом, один из них обязателен:
+# `uv sync --extra cpu` или `uv sync --extra cu126`.
+# CPU-сборка нужна на ноутбуке без NVIDIA: обычная с PyPI тянет CUDA-библиотеки на ~2.5 ГБ.
+# cu126 работает на GTX 16xx/RTX 20xx (sm_75) и новее; драйвер Windows/Linux должен быть >= 560.
+cpu = ["torch>=2.4"]
+cu126 = ["torch>=2.4"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -25,11 +32,21 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# CPU-сборка torch: обычная с PyPI тянет CUDA-библиотеки на ~2.5 ГБ, которые на ноутбуке без NVIDIA не нужны.
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu126" }]]
+
 [tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
