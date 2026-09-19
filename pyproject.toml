@@ -1,0 +1,35 @@
+[project]
+name = "legal-rag"
+version = "0.2.0"
+description = "Локальный RAG-поиск по законодательству РФ (transformers + FAISS, без RAG-фреймворков)"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4",
+    "transformers>=4.56",
+    "faiss-cpu>=1.8",
+    "numpy>=1.26",
+    "tqdm>=4.66",
+    "requests>=2.31",
+    "python-docx>=1.1",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# CPU-сборка torch: обычная с PyPI тянет CUDA-библиотеки на ~2.5 ГБ, которые на ноутбуке без NVIDIA не нужны.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
