@@ -12,9 +12,14 @@ import re
 from dataclasses import dataclass
 
 _SECTION_RE = re.compile(r"^Раздел\s+([IVXLCDM\d]+)\.?\s*(.*)$", re.MULTILINE)
-_CHAPTER_RE = re.compile(r"^Глава\s+(\d+)\.?\s*(.*)$", re.MULTILINE)
+# Главы бывают дробными: "Глава 36.1" в ТК, "Глава 9.1" в ГК.
+_CHAPTER_RE = re.compile(r"^Глава\s+(\d+(?:\.\d+)*)\.?\s*(.*)$", re.MULTILINE)
 # Номера вида "12", "66.1", "123.20-1" (последний — реальная нумерация ГК РФ).
 _ARTICLE_RE = re.compile(r"^Статья\s+(\d+(?:[.\-]\d+)*)\.?\s*(.*)$", re.MULTILINE)
+# Викитека пишет вставленные статьи и главы УК надстрочным индексом: "Статья 124¹"
+# вместо официального "Статья 124.1". Без замены это была бы вторая статья 124.
+_SUPERSCRIPT_NUMBER_RE = re.compile(r"^((?:Статья|Глава)\s+\d+)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)", re.MULTILINE)
+_SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 
 # В оглавлении между заголовками статей текста нет — только перевод строки
 # и иногда заголовок раздела/главы.
@@ -32,6 +37,9 @@ class ParsedArticle:
 
 def parse_articles(raw_text: str) -> list[ParsedArticle]:
     text = raw_text.replace("\r\n", "\n")
+    text = _SUPERSCRIPT_NUMBER_RE.sub(
+        lambda m: f"{m.group(1)}.{m.group(2).translate(_SUPERSCRIPT_DIGITS)}", text
+    )
 
     article_matches = list(_ARTICLE_RE.finditer(text))
     if not article_matches:

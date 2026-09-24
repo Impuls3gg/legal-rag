@@ -78,6 +78,26 @@ def test_dashed_article_numbers():
     assert articles[1].article_title == "Личный фонд"
 
 
+def test_superscript_article_numbers_become_dotted():
+    text = (
+        "Статья 124. Неоказание помощи больному\nТело.\n\n"
+        "Статья 124¹. Воспрепятствование оказанию медицинской помощи\nТело.\n"
+    )
+    articles = parse_articles(text)
+    assert [a.article_number for a in articles] == ["124", "124.1"]
+    assert articles[1].article_title == "Воспрепятствование оказанию медицинской помощи"
+
+
+def test_fractional_chapter_numbers():
+    text = (
+        "Глава 36. Обеспечение прав работников\n\nСтатья 225. Обучение\nТело.\n\n"
+        "Глава 36.1. Расследование несчастных случаев\n\nСтатья 226. Микротравмы\nТело.\n"
+    )
+    articles = parse_articles(text)
+    assert articles[0].chapter == "36. Обеспечение прав работников"
+    assert articles[1].chapter == "36.1. Расследование несчастных случаев"
+
+
 def test_no_articles_falls_back_to_full_text():
     articles = parse_articles("Просто текст без статей.")
     assert len(articles) == 1
