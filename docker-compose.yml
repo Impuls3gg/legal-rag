@@ -1,0 +1,26 @@
+services:
+  web:
+    build: .
+    image: legal-rag:latest
+    ports:
+      - "8501:8501"
+    environment:
+      LEGAL_RAG_DEVICE: cuda
+    volumes:
+      # Веса, скачанные вручную в models/<имя>, подхватываются config.py;
+      # если папки нет — модели качаются с Hub в том hf-cache один раз.
+      - ./models:/app/models:ro
+      # data/ на запись: build-index внутри контейнера пишет в data/index.
+      - ./data:/app/data
+      - hf-cache:/cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

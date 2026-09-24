@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+.pytest_cache
+**/__pycache__
+**/*.pyc
+*.egg-info
+src/*.egg-info
+# Монтируются томами, в образ не копируются.
+models
+data
+.env

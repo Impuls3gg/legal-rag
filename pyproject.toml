@@ -18,6 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Веб-интерфейс (src/legal_rag/web.py); для CLI не нужен.
+web = ["streamlit>=1.40"]
 # Сборка torch выбирается extra-флагом, один из них обязателен:
 # `uv sync --extra cpu` или `uv sync --extra cu126`.
 # CPU-сборка нужна на ноутбуке без NVIDIA: обычная с PyPI тянет CUDA-библиотеки на ~2.5 ГБ.

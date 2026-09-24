@@ -17,6 +17,7 @@ from .index.faiss_store import FaissStore
 from .ingest.local_files import LocalFilesSource
 from .ingest.pravo_gov import PravoGovSource
 from .llm import HFLLM
+from .pipeline import is_out_of_corpus
 from .retrieval import Retriever
 
 
@@ -61,10 +62,9 @@ def ask(question: str) -> None:
         print("Ничего не найдено. Индекс построен? (build-index)")
         return
 
-    best = results[0].score
-    if best < settings.min_score:
+    if is_out_of_corpus(results):
         print(
-            f"В базе нет статей по этому вопросу: лучшее совпадение {best:.3f} "
+            f"В базе нет статей по этому вопросу: лучшее совпадение {results[0].score:.3f} "
             f"ниже порога {settings.min_score:.2f} (LEGAL_RAG_MIN_SCORE). "
             f"Ближайшее, что нашлось:"
         )

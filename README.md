@@ -120,6 +120,47 @@ MRR 0.968; порог 0.55 оставляет 97% вопросов с ответ
 вопросов вне её (оставшиеся 25% — смежные темы из части второй ГК: аренда,
 заём, купля-продажа).
 
+**Веб-интерфейс** (Streamlit, модели загружаются один раз и остаются в памяти):
+
+```bash
+uv sync --extra cu126 --extra web
+uv run streamlit run src/legal_rag/web.py
+```
+
+## Деплой на сервер (Docker Compose, GPU)
+
+На сервере нужны драйвер NVIDIA ≥ 560, Docker и
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+Проверка, что контейнеры видят GPU:
+
+```bash
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
+Веса моделей и индекс в образ не входят, они монтируются из `models/` и `data/`.
+Есть два варианта:
+
+- скопировать с машины разработчика готовые `data/raw/`, `data/index/` и
+  (по желанию) `models/`, например через `rsync`;
+- собрать на сервере: модели скачаются с Hub в том `hf-cache` при первом запуске.
+
+```bash
+docker compose build
+# индекс, если он не скопирован:
+docker compose run --rm web python scripts/fetch_wikisource.py --page "Гражданский кодекс РФ" \
+    --chapters 1-29 --act-id gk-rf-chast-1 \
+    --title "Гражданский кодекс Российской Федерации (часть первая)" --number 51-ФЗ --date 1994-11-30
+docker compose run --rm web python -m legal_rag.cli build-index
+docker compose up -d
+```
+
+Интерфейс откроется на `http://<сервер>:8501`. Первый вопрос после старта
+ждёт загрузки моделей, около минуты. Логи смотрите через `docker compose logs -f web`.
+
+В Streamlit нет авторизации. Если сервер доступен из интернета, закройте порт
+8501 и поставьте перед ним reverse proxy с паролем (nginx + basic auth, Caddy)
+либо ходите через SSH-туннель: `ssh -L 8501:localhost:8501 <сервер>`.
+
 **Настройки** задаются переменными окружения с префиксом `LEGAL_RAG_`:
 `TOP_K` (6), `MIN_SCORE` (0.55, порог отказа; 0 — отключить),
 `CHUNK_MAX_CHARS` (1500), `LLM_MAX_NEW_TOKENS` (512), `LLM_TEMPERATURE` (0),
@@ -139,6 +180,8 @@ src/legal_rag/
   embeddings.py      HFEmbedder: bge-m3 через transformers
   index/faiss_store.py  FAISS IndexFlatIP + chunks.json с метаданными
   retrieval.py       вопрос -> top-k чанков
+  pipeline.py        вопрос -> ответ: поиск, порог отказа, генерация (общее для CLI и веба)
+  web.py             веб-интерфейс на Streamlit
   llm.py             HFLLM: Qwen2.5 через transformers, промпт «строго по контексту»
   models.py          RawAct, Chunk, SearchResult
   config.py          настройки (LEGAL_RAG_*)
