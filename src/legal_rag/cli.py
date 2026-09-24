@@ -75,10 +75,9 @@ def ask(question: str) -> None:
     # запаса под KV-кэш LLM) до того, как грузить генеративную модель.
     device = retriever.embedder.device
     del retriever
-    if device.startswith("cuda"):
-        import torch
+    import torch
 
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
 
     print(f"Загружаю {settings.llm_model} ({device})...", file=sys.stderr)
     llm = HFLLM()

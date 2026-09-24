@@ -4,8 +4,6 @@ services:
     image: legal-rag:latest
     ports:
       - "8501:8501"
-    environment:
-      LEGAL_RAG_DEVICE: cuda
     volumes:
       # Веса, скачанные вручную в models/<имя>, подхватываются config.py;
       # если папки нет — модели качаются с Hub в том hf-cache один раз.

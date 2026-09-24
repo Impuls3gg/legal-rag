@@ -29,8 +29,8 @@ def _model(name: str, default: str) -> str:
 class Settings:
     embedding_model: str = _model("EMBEDDING_MODEL", "BAAI/bge-m3")
     llm_model: str = _model("LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
-    # "auto" -> cuda, если torch её видит, иначе cpu. Явно: "cpu", "cuda", "cuda:1".
-    device: str = _env("DEVICE", "auto")
+    # Только GPU: "cuda" или конкретная карта, например "cuda:1".
+    device: str = _env("DEVICE", "cuda")
 
     data_dir: str = _env("DATA_DIR", "data")
     raw_dir: str = os.path.join(data_dir, "raw")
@@ -52,29 +52,20 @@ class Settings:
 
     llm_max_new_tokens: int = int(_env("LLM_MAX_NEW_TOKENS", "512"))
     llm_temperature: float = float(_env("LLM_TEMPERATURE", "0"))
-    # "auto" -> fp16 на GPU, bf16 на CPU. Явно: "float16" | "bfloat16" | "float32".
-    llm_dtype: str = _env("LLM_DTYPE", "auto")
 
 
 settings = Settings()
 
 
 def resolve_device() -> str:
-    """Подставляет реальное устройство вместо "auto". torch импортируется здесь,
-    а не наверху модуля, чтобы config оставался лёгким для тестов парсера."""
-    if settings.device != "auto":
-        return settings.device
+    """Проверяет, что GPU доступна, и возвращает устройство из настроек.
+    torch импортируется здесь, а не наверху модуля, чтобы config оставался
+    лёгким для тестов парсера."""
     import torch
 
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
-def resolve_llm_dtype(device: str):
-    """bf16 экономит память на CPU, но GTX 16xx / RTX 20xx (Turing, sm_75) его
-    аппаратно не умеют — там нужен fp16. Ampere и новее умеют оба, fp16 для
-    1.5B-модели тоже безопасен, поэтому на любой CUDA берём fp16."""
-    import torch
-
-    if settings.llm_dtype != "auto":
-        return getattr(torch, settings.llm_dtype)
-    return torch.float16 if device.startswith("cuda") else torch.bfloat16
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA недоступна: проект работает только на GPU. Проверьте драйвер "
+            "NVIDIA (>= 560) и, в Docker, NVIDIA Container Toolkit."
+        )
+    return settings.device

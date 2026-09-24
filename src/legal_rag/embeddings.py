@@ -13,10 +13,8 @@ class HFEmbedder:
         self.model_name = model_name or settings.embedding_model
         self.device = device or resolve_device()
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        # На GPU fp16 вдвое уменьшает bge-m3 (2.3 -> 1.1 ГБ VRAM), чтобы рядом
-        # поместилась LLM; на CPU fp16 медленный, остаёмся в fp32.
-        dtype = torch.float16 if self.device.startswith("cuda") else torch.float32
-        self.model = AutoModel.from_pretrained(self.model_name, dtype=dtype).to(self.device).eval()
+        # fp16 вдвое уменьшает bge-m3 (2.3 -> 1.1 ГБ VRAM), чтобы рядом поместилась LLM.
+        self.model = AutoModel.from_pretrained(self.model_name, dtype=torch.float16).to(self.device).eval()
 
     @property
     def dim(self) -> int:

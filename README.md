@@ -1,55 +1,47 @@
 # legal-rag
 
-Вопросно-ответная система по законодательству РФ, работающая целиком на
-локальной машине. Пользователь задаёт вопрос на
-русском, система находит релевантные статьи закона и отвечает строго на их
-основе, со ссылками на статьи.
+Вопросно-ответная система по законодательству РФ, которая работает целиком на
+своём сервере. Пользователь задаёт вопрос на русском, система находит
+релевантные статьи закона и отвечает строго на их основе, со ссылками на статьи.
 
-## Как запустить проект у себя
+## Требования
 
-Нужны Python 3.10+ и [uv](https://docs.astral.sh/uv/). GPU не обязателен.
+- NVIDIA GPU от 6 ГБ VRAM, поколение Turing (GTX 16xx / RTX 20xx) и новее
+- драйвер NVIDIA ≥ 560
+- Docker с Compose и [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
-**1. Запуск**
-
-Torch нужен в любом случае, но сборок две — выберите одну. Без `--extra`
-torch не установится вовсе: так `uv sync` не подменит выбранную сборку
-дефолтной с PyPI.
-
-Запуск на CPU (~6 ГБ свободной RAM, скачивание ~200 МБ):
+Проверка, что контейнеры видят GPU:
 
 ```bash
-uv sync --extra cpu --extra dev
+docker run --rm --gpus all ubuntu nvidia-smi
 ```
 
-Запуск на GPU (NVIDIA от 6 ГБ VRAM, скачивание ~2.5 ГБ):
+Модели:
 
-```bash
-uv sync --extra cu126 --extra dev
-```
-
-Проверить, что карта видна:
-
-```bash
-uv run python -c "import torch; print(torch.cuda.is_available())"
-```
-
-Устройство выбирается автоматически: CUDA, если стоит GPU-сборка и карта
-доступна, иначе CPU. Принудительно — `LEGAL_RAG_DEVICE=cpu`.
-
-**2. Модели**
-
-| Роль | Модель | На диске | В памяти |
+| Роль | Модель | На диске | VRAM (fp16) |
 |---|---|---|---|
-| эмбеддинги | `BAAI/bge-m3` | 2.3 ГБ | ~2.3 ГБ |
-| генерация | `Qwen/Qwen2.5-1.5B-Instruct` | 3.1 ГБ | ~3.2 ГБ |
+| эмбеддинги | `BAAI/bge-m3` | 2.3 ГБ | ~1.1 ГБ |
+| генерация | `Qwen/Qwen2.5-1.5B-Instruct` | 3.1 ГБ | ~3.1 ГБ |
 
-**3. Данные**
+Веса моделей и индекс в образ не входят: они монтируются из `models/` и `data/`.
+Если в `models/` нет весов, модели скачаются с Hugging Face Hub в том `hf-cache`
+при первом запуске.
 
-Быстрее всего взять кодекс с ru.wikisource.org — скрипт скачивает главы и
-складывает текст с метаданными в `data/raw/`:
+## Запуск
+
+**1. Сборка образа**
 
 ```bash
-uv run python scripts/fetch_wikisource.py \
+docker compose build
+```
+
+**2. Данные**
+
+Быстрее всего взять кодекс с ru.wikisource.org: скрипт скачивает главы и
+складывает текст с метаданными в `data/raw/`.
+
+```bash
+docker compose run --rm web python scripts/fetch_wikisource.py \
     --page "Гражданский кодекс РФ" --chapters 1-29 \
     --act-id gk-rf-chast-1 \
     --title "Гражданский кодекс Российской Федерации (часть первая)" \
@@ -57,28 +49,44 @@ uv run python scripts/fetch_wikisource.py \
 ```
 
 Свой текст добавляется через
-`uv run python scripts/add_act.py` или вручную: `data/raw/<act_id>/text.txt`
-плюс `meta.json` с полями `title`, `act_type`, `number`, `date`, `source_url`.
-Оглавление в начале текста отбрасывается автоматически.
+`docker compose run --rm web python scripts/add_act.py` или вручную:
+`data/raw/<act_id>/text.txt` плюс `meta.json` с полями `title`, `act_type`,
+`number`, `date`, `source_url`. Оглавление в начале текста отбрасывается
+автоматически.
 
-**4. Индексация**
-
-```bash
-uv run python -m legal_rag.cli build-index
-```
-
-**5. Проверка**
+**3. Индексация**
 
 ```bash
-uv run pytest tests/ -q
+docker compose run --rm web python -m legal_rag.cli build-index
 ```
+
+Индекс пересобирается после каждого изменения `data/raw/`.
+
+**4. Запуск веб-интерфейса**
+
+```bash
+docker compose up -d
+```
+
+Интерфейс откроется на `http://<сервер>:8501`. Первый вопрос после старта
+ждёт загрузки моделей, около минуты. Логи смотрите через `docker compose logs -f web`.
+
+В Streamlit нет авторизации. Если сервер доступен из интернета, закройте порт
+8501 и поставьте перед ним reverse proxy с паролем (nginx + basic auth, Caddy)
+либо ходите через SSH-туннель: `ssh -L 8501:localhost:8501 <сервер>`.
 
 ## Как использовать
 
-**Задать вопрос:**
+Основной способ — веб-интерфейс. Под каждым ответом есть список статей, на
+которых он построен, с их текстом.
+
+Если ответа в базе нет, система отказывается отвечать, а не выдумывает. LLM
+при этом не запускается.
+
+**Вопрос из командной строки:**
 
 ```bash
-uv run python -m legal_rag.cli ask "Может ли суд применить исковую давность по своей инициативе?"
+docker compose run --rm web python -m legal_rag.cli ask "Может ли суд применить исковую давность по своей инициативе?"
 ```
 
 ```
@@ -92,25 +100,11 @@ uv run python -m legal_rag.cli ask "Может ли суд применить и
 ...
 ```
 
-Если ответа в базе нет, система отказывается отвечать, а не выдумывает — LLM
-при этом даже не загружается:
-
-```bash
-uv run python -m legal_rag.cli ask "Что такое необходимая оборона?"
-```
-
-```
-В базе нет статей по этому вопросу: лучшее совпадение 0.423 ниже порога 0.55
-(LEGAL_RAG_MIN_SCORE). Ближайшее, что нашлось:
-(0.423) Гражданский кодекс Российской Федерации (часть первая), глава 23. ОБЕСПЕЧЕНИЕ ИСПОЛНЕНИЯ ОБЯЗАТЕЛЬСТВ, ст. 329
-...
-```
-
 **Оценить качество поиска:**
 
 ```bash
-uv run python scripts/evaluate.py        # eval/gk_rf_1.jsonl
-uv run python scripts/evaluate.py -v     # результат по каждому вопросу
+docker compose run --rm web python scripts/evaluate.py        # eval/gk_rf_1.jsonl
+docker compose run --rm web python scripts/evaluate.py -v     # результат по каждому вопросу
 ```
 
 Набор `eval/gk_rf_1.jsonl` — 60 вопросов с эталонными статьями и 14 вопросов
@@ -120,51 +114,13 @@ MRR 0.968; порог 0.55 оставляет 97% вопросов с ответ
 вопросов вне её (оставшиеся 25% — смежные темы из части второй ГК: аренда,
 заём, купля-продажа).
 
-**Веб-интерфейс** (Streamlit, модели загружаются один раз и остаются в памяти):
+## Настройки
 
-```bash
-uv sync --extra cu126 --extra web
-uv run streamlit run src/legal_rag/web.py
-```
-
-## Деплой на сервер (Docker Compose, GPU)
-
-На сервере нужны драйвер NVIDIA ≥ 560, Docker и
-[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-Проверка, что контейнеры видят GPU:
-
-```bash
-docker run --rm --gpus all ubuntu nvidia-smi
-```
-
-Веса моделей и индекс в образ не входят, они монтируются из `models/` и `data/`.
-Есть два варианта:
-
-- скопировать с машины разработчика готовые `data/raw/`, `data/index/` и
-  (по желанию) `models/`, например через `rsync`;
-- собрать на сервере: модели скачаются с Hub в том `hf-cache` при первом запуске.
-
-```bash
-docker compose build
-# индекс, если он не скопирован:
-docker compose run --rm web python scripts/fetch_wikisource.py --page "Гражданский кодекс РФ" \
-    --chapters 1-29 --act-id gk-rf-chast-1 \
-    --title "Гражданский кодекс Российской Федерации (часть первая)" --number 51-ФЗ --date 1994-11-30
-docker compose run --rm web python -m legal_rag.cli build-index
-docker compose up -d
-```
-
-Интерфейс откроется на `http://<сервер>:8501`. Первый вопрос после старта
-ждёт загрузки моделей, около минуты. Логи смотрите через `docker compose logs -f web`.
-
-В Streamlit нет авторизации. Если сервер доступен из интернета, закройте порт
-8501 и поставьте перед ним reverse proxy с паролем (nginx + basic auth, Caddy)
-либо ходите через SSH-туннель: `ssh -L 8501:localhost:8501 <сервер>`.
-
-**Настройки** задаются переменными окружения с префиксом `LEGAL_RAG_`:
+Задаются переменными окружения с префиксом `LEGAL_RAG_` в секции `environment:`
+файла `docker-compose.yml`, после изменения — `docker compose up -d`:
 `TOP_K` (6), `MIN_SCORE` (0.55, порог отказа; 0 — отключить),
 `CHUNK_MAX_CHARS` (1500), `LLM_MAX_NEW_TOKENS` (512), `LLM_TEMPERATURE` (0),
-`EMBEDDING_MODEL`, `LLM_MODEL`, `DEVICE` (auto).
+`EMBEDDING_MODEL`, `LLM_MODEL`.
 Полный список — в `src/legal_rag/config.py`.
 
 ## Структура
@@ -191,7 +147,9 @@ scripts/
   add_act.py           интерактивное добавление акта из буфера обмена
   evaluate.py          метрики поиска на eval-наборе
 eval/gk_rf_1.jsonl   вопросы с эталонными статьями
-tests/               парсер и чанкинг — самые хрупкие места пайплайна
+tests/               тесты парсера и чанкинга
+Dockerfile           образ на torch cu126 со Streamlit
+docker-compose.yml   сервис web: GPU, порт 8501, тома models/, data/, hf-cache
 data/
   raw/               исходные тексты актов (в .gitignore)
   index/             FAISS-индекс и метаданные (в .gitignore)

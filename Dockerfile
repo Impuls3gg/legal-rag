@@ -23,13 +23,13 @@ WORKDIR /app
 # пересобирается при правке кода.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --extra cu126 --extra web
+    uv sync --frozen --no-install-project --extra web
 
 COPY src ./src
 COPY scripts ./scripts
 COPY eval ./eval
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --extra cu126 --extra web
+    uv sync --frozen --extra web
 
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
